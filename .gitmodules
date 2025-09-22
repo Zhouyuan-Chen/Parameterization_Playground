@@ -1,0 +1,6 @@
+[submodule "external/geometry-central"]
+	path = external/geometry-central
+	url = https://github.com/nmwsharp/geometry-central.git
+[submodule "external/polyscope"]
+	path = external/polyscope
+	url = https://github.com/nmwsharp/polyscope.git
