@@ -11,30 +11,24 @@
 
 #include <Eigen/SparseCholesky>
 
+
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
 namespace parameterization_playground {
 
-class BFF
+class DP
 {
 public:
-    BFF();
-    ~BFF();
+    DP();
+    ~DP();
 
-    enum ConstraintType { BND_SCALE, BND_CURVATURE, BND_FIT_SHAPE };
-
-    VertexData<Vector2> solve(
-        ManifoldSurfaceMesh& mesh,
-        VertexPositionGeometry& geom,
-        VertexData<double>& constraint,
-        ConstraintType type);
+    enum ConstraintType { BND_SCALE, BND_CURVATURE };
 
     VertexData<Vector2> solve(
         ManifoldSurfaceMesh& mesh,
         VertexPositionGeometry& geom,
         VertexData<double>& constraint,
-        std::vector<Vector2>& shape,
         ConstraintType type);
 };
 

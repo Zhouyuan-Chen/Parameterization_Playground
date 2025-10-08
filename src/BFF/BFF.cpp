@@ -1,8 +1,24 @@
 #include "BFF.hpp"
 
+
 namespace parameterization_playground {
 BFF::BFF() {}
 BFF::~BFF() {}
+
+inline double angle2pi(const Vector2& u, const Vector2& v)
+{
+    Vector2 uu = unit(u);
+    Vector2 vv = unit(v);
+
+    double dot_val = std::fmax(-1., std::fmin(1., dot(uu, vv)));
+    double ang = std::acos(dot_val); // in [0, π]
+
+    double cross_val = uu.x * vv.y - uu.y * vv.x;
+    if (cross_val < 0) {
+        ang = 2.0 * M_PI - ang; // flip to [π, 2π)
+    }
+    return ang;
+}
 
 VertexData<Vector2> BFF::solve(
     ManifoldSurfaceMesh& mesh,
@@ -10,6 +26,19 @@ VertexData<Vector2> BFF::solve(
     VertexData<double>& constraint,
     ConstraintType type)
 {
+    std::vector<Vector2> shape;
+    return solve(mesh, geom, constraint, shape, type);
+}
+
+VertexData<Vector2> BFF::solve(
+    ManifoldSurfaceMesh& mesh,
+    VertexPositionGeometry& geom,
+    VertexData<double>& constraint,
+    std::vector<Vector2>& shape,
+    ConstraintType type)
+{
+    VertexData<Vector2> uv(mesh);
+
     VertexData<int> bvid(mesh);
     VertexData<int> ivid(mesh);
 
@@ -87,9 +116,7 @@ VertexData<Vector2> BFF::solve(
         int cnt = 0;
         for (Vertex v : mesh.vertices()) {
             if (v.isBoundary()) {
-                // target_curvature[v] = OmegaB[cnt] - h[cnt];
                 target_curvature[v] = h[cnt++];
-                // target_curvature[v] = 6.28 / (boundary_num * 0.1);
             }
         }
 
@@ -121,6 +148,179 @@ VertexData<Vector2> BFF::solve(
                 target_curvature[v] = h[bvid[v]];
             }
         }
+    } else if (type == BND_FIT_SHAPE) {
+        Eigen::VectorXd target_h(bid);
+        Eigen::VectorXd target_h_pre(bid);
+        target_h.setZero();
+        target_h_pre.setZero();
+
+        std::vector<double> shape_accumulate_len;
+        double target_len_sum = 0.0;
+        for (int i = 0; i < (int)shape.size(); i++) {
+            shape_accumulate_len.push_back(target_len_sum);
+            int j = i == (int)shape.size() - 1 ? 0 : i + 1;
+            target_len_sum += (shape[i] - shape[j]).norm();
+        }
+        shape_accumulate_len.push_back(target_len_sum);
+
+        for (int itr = 0; itr < 10; itr++) {
+            target_h_pre = target_h;
+            // compute lengths
+            double cur_len_sum = 0.0;
+            if (itr == 0) {
+                for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                    cur_len_sum += geom.edgeLength(he.edge());
+                }
+            } else {
+                for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                    cur_len_sum += (uv[he.tipVertex()] - uv[he.tailVertex()]).norm();
+                }
+            }
+
+            VertexData<double> cur_cumlen(mesh, 0);
+            {
+                double cur_accumulate_len = 0;
+                for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                    cur_cumlen[he.tailVertex()] = cur_accumulate_len;
+                    if (itr == 0) {
+                        cur_accumulate_len += geom.edgeLength(he.edge());
+                    } else {
+                        cur_accumulate_len += (uv[he.tipVertex()] - uv[he.tailVertex()]).norm();
+                    }
+                }
+            }
+
+            // sample
+            std::vector<Vector2> z_bnd(bid);
+
+            for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                double t = cur_cumlen[he.tailVertex()] / cur_len_sum * target_len_sum;
+
+                for (int i = 0; i < shape_accumulate_len.size() - 1; i++) {
+                    double low_bound = shape_accumulate_len[i];
+                    double high_bound = shape_accumulate_len[i + 1];
+
+                    if (t >= low_bound && t <= high_bound) {
+                        double alpha = (t - low_bound) / (high_bound - low_bound);
+                        int id = bvid[he.tailVertex()];
+
+                        if (i == shape_accumulate_len.size() - 1) {
+                            z_bnd[id] = (1 - alpha) * shape[i] + alpha * shape[0];
+                            std::cout << z_bnd[id].x << " " << z_bnd[id].y << std::endl;
+                        } else {
+                            z_bnd[id] = (1 - alpha) * shape[i] + alpha * shape[i + 1];
+                            std::cout << z_bnd[id].x << " " << z_bnd[id].y << std::endl;
+                        }
+                    }
+                }
+            }
+
+            // recompute target curvatures
+            double totalAngle = 0.0;
+            VertexData<Halfedge> prev_edge(mesh);
+            for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                prev_edge[he.tipVertex()] = he;
+            }
+
+            // compute angles
+            for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                Vertex vi = prev_edge[he.tailVertex()].tailVertex();
+                Vertex vj = he.tailVertex();
+                Vertex vk = he.tipVertex();
+                int id_i = bvid[vi];
+                int id_j = bvid[vj];
+                int id_k = bvid[vk];
+
+                // safe: if any z_bnd entry is uninitialized (shouldn't be), guard
+                Vector2 vec1 = z_bnd[id_k] - z_bnd[id_j];
+                Vector2 vec2 = z_bnd[id_i] - z_bnd[id_j];
+                double theta = angle2pi(vec1, vec2);
+                // target_h_pre[id_j] = target_h[id_j]; // store previous
+                target_h[id_j] = PI - theta;
+                totalAngle += target_h[id_j];
+                std::cout << target_h[id_j] / M_PI << std::endl;
+                std::cout << z_bnd[id_j].x << " " << z_bnd[id_j].y << std::endl;
+            }
+
+            // orientation fix
+            if (totalAngle < 0.0) {
+                target_h *= -1.0;
+                totalAngle *= -1.0;
+            }
+
+            // average with previous (0.5*(cur + prev))
+            double interpolate_rate = 1.0;
+            if (itr != 0)
+                for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                    int id_j = bvid[he.tailVertex()];
+                    target_h[id_j] = target_h[id_j] * (interpolate_rate) +
+                                     (1 - interpolate_rate) * target_h_pre[id_j];
+                }
+
+            // closure correction: distribute (2π - totalAngle) weighted by dual lengths of sampled
+            // z
+            if (true) {
+                double check_sum = 0;
+                for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
+                    Vertex vi = prev_edge[he.tailVertex()].tailVertex();
+                    Vertex vj = he.tailVertex();
+                    Vertex vk = he.tipVertex();
+                    int id_i = bvid[vi];
+                    int id_j = bvid[vj];
+                    int id_k = bvid[vk];
+
+                    double len1 = (z_bnd[id_k] - z_bnd[id_j]).norm();
+                    double len2 = (z_bnd[id_i] - z_bnd[id_j]).norm();
+                    double ldual = 0.5 * (len1 + len2);
+
+                    target_h[id_j] += (ldual / target_len_sum) * (2.0 * M_PI - totalAngle);
+
+                    check_sum += target_h[id_j];
+                }
+
+                // std::cout << check_sum << std::endl;
+                // if (target_h.sum() - 2 * M_PI > 1e-3) {
+                //     double scale = (2.0 * M_PI) / check_sum;
+                //     check_sum = 0;
+                //     for (int j = 0; j < target_h.size(); j++) {
+                //         target_h[j] *= scale;
+
+                //         std::cout << target_h[j] / PI << std::endl;
+                //     }
+                //     // if (itr == 0) {
+                //     //     double scale = (2.0 * M_PI) / check_sum;
+                //     //     check_sum = 0;
+                //     //     for (int j = 0; j < target_h.size(); j++) {
+                //     //         target_h[j] *= scale;
+                //     //         check_sum += target_h[j];
+                //     //     }
+                //     // } else {
+                //     //     std::cout << "end at itr==" << itr << std::endl;
+                //     //     return uv;
+                //     // }
+                // }
+            }
+
+
+            // build constraint and solve
+            VertexData<double> constraint_h(mesh, 0.0);
+            for (Vertex v : mesh.vertices()) {
+                if (v.isBoundary()) {
+                    int id = bvid[v];
+                    constraint_h[v] = target_h[id];
+                } else {
+                    constraint_h[v] = 0;
+                }
+            }
+            // std::cout << target_h.sum() << std::endl;
+            uv = solve(mesh, geom, constraint_h, BND_CURVATURE);
+        }
+
+        for (Vertex v : mesh.vertices()) {
+            uv[v].x *= -1;
+        }
+        return uv;
+
     } else {
         std::cout << "error: wrong constraint type for BFF" << std::endl;
         exit(1);
@@ -150,7 +350,6 @@ VertexData<Vector2> BFF::solve(
         targetLength - N * T.transpose() * (T * N * T.transpose()).inverse() * (T * targetLength);
 
 
-    VertexData<Vector2> uv(mesh);
     double u = 0;
     double v = 0;
     for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
@@ -188,5 +387,6 @@ VertexData<Vector2> BFF::solve(
 
     return uv;
 }
+
 
 } // namespace parameterization_playground
