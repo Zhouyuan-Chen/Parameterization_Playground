@@ -127,98 +127,84 @@ VertexData<Vector2> DP::solve(
         }
     }
 
-    FaceData<Vector3> dir(mesh);
+    FaceData<Vector3> dp_euR_X(mesh), dp_euR_Y(mesh);
+    Eigen::VectorXd dp_euR_X_vec(mesh.nFaces() * 3), dp_euR_Y_vec(mesh.nFaces() * 3);
 
     for (Face f : mesh.faces()) {
-        double w = 0;
+        double u_bar = 0;
         for (Halfedge he : f.adjacentHalfedges()) {
+            u_bar += PD_u[he.tipVertex()];
         }
-        Eigen::Matrix2d Rf = R[f].transpose();
-        Eigen::Vector2d v = Rf.col(0);
-        // v.normalize();
-        dir[f].x = v.x();
-        dir[f].y = v.y();
-        dir[f].z = 0;
+        u_bar /= 3.0;
+        double eu = exp(u_bar);
+
+        Eigen::Matrix2d euRT = eu * R[f].transpose();
+
+        Eigen::Vector2<double> euRT_X = euRT.col(0);
+        Eigen::Vector2<double> euRT_Y = euRT.col(1);
+
+        dp_euR_X[f].x = euRT_X.x();
+        dp_euR_X[f].y = euRT_X.y();
+        dp_euR_X[f].z = 0;
+
+        dp_euR_Y[f].x = euRT_Y.x();
+        dp_euR_Y[f].y = euRT_Y.y();
+        dp_euR_Y[f].z = 0;
+
+        int fid = f.getIndex();
+        dp_euR_X_vec[fid * 3] = euRT_X.x();
+        dp_euR_X_vec[fid * 3 + 1] = euRT_X.y();
+        dp_euR_X_vec[fid * 3 + 2] = 0;
+
+        dp_euR_Y_vec[fid * 3] = euRT_Y.x();
+        dp_euR_Y_vec[fid * 3 + 1] = euRT_Y.y();
+        dp_euR_Y_vec[fid * 3 + 2] = 0;
     }
 
-    this->dp_wR = dir;
 
-    // Eigen::SparseMatrix<double> grad_m = geom.polygonGradientMatrix;
-
-    Eigen::VectorXd frame(3 * mesh.nFaces());
-
-    for (Face f : mesh.faces()) {
-        int id = f.getIndex();
-        double eu = 0;
-        for (Halfedge he : f.adjacentHalfedges()) {
-            eu += PD_u[he.tipVertex()];
-        }
-        eu /= 3.0;
-
-        frame[id * 3] = dir[f].x;
-        frame[id * 3 + 1] = dir[f].y;
-        frame[id * 3 + 2] = 0;
-    }
+    this->dp_euRT_X = dp_euR_X;
+    this->dp_euRT_Y = dp_euR_Y;
 
     geom.requirePolygonDivergenceMatrix();
     geom.requireCotanLaplacian();
-
-    auto lap_m = geom.cotanLaplacian;
-    auto div_m = geom.polygonDivergenceMatrix;
-
-    Eigen::VectorXd frame_x(mesh.nFaces() * 3);
-    Eigen::VectorXd frame_y(mesh.nFaces() * 3);
-    for (Face f : mesh.faces()) {
-        int id = f.getIndex();
-        frame_x(id * 3) = frame[id * 3];
-        frame_x(id * 3 + 1) = 0;
-        frame_x(id * 3 + 2) = 0;
-        frame_y(id * 3) = frame[id * 3 + 1];
-        frame_y(id * 3 + 1) = 0;
-        frame_y(id * 3 + 2) = 0;
-    }
-
-    std::cout << frame_x.size() << std::endl;
-    std::cout << div_m.rows() << " " << div_m.cols() << std::endl;
-
-
-    Eigen::VectorXd div_x = div_m * frame_x;
-    Eigen::VectorXd div_y = div_m * frame_y;
-
-
-    VertexData<double> div_wR_x(mesh);
-    VertexData<double> div_wR_y(mesh);
-    for (Vertex v : mesh.vertices()) {
-        int id = v.getIndex();
-        div_wR_x[v] = div_x(id);
-        div_wR_y[v] = div_y(id);
-    }
-
-    this->div_wR_x = div_wR_x;
-    this->div_wR_y = div_wR_y;
+    SparseMatrix<double> div_m = geom.polygonDivergenceMatrix;
+    SparseMatrix<double> lap_m = geom.cotanLaplacian;
 
     int fixed_id = 0;
     for (int i = 0; i < lap_m.cols(); i++) {
         lap_m.coeffRef(fixed_id, i) = 0;
     }
     lap_m.coeffRef(fixed_id, fixed_id) = 1.0;
-    div_x(fixed_id) = 0.0;
-    div_y(fixed_id) = 0.0;
 
-    Eigen::SimplicialLLT<SparseMatrix<double>> cholesky_uv;
-    cholesky_uv.compute(lap_m);
+    Eigen::SimplicialLLT<SparseMatrix<double>> cholesky_lap;
+    cholesky_lap.compute(lap_m);
 
+    Eigen::VectorXd rhs_u = div_m * dp_euR_X_vec;
+    Eigen::VectorXd rhs_v = div_m * dp_euR_Y_vec;
 
-    std::cout << lap_m.rows() << " " << lap_m.cols() << std::endl;
+    VertexData<double> div_ueRT_X(mesh), div_ueRT_Y(mesh);
 
-    Eigen::VectorXd u = cholesky_uv.solve(div_x);
-    Eigen::VectorXd v = cholesky_uv.solve(div_y);
-    std::cout << "finished" << std::endl;
+    for (Vertex v : mesh.vertices()) {
+        int vid = v.getIndex();
+        div_ueRT_X[v] = rhs_u[vid];
+        div_ueRT_Y[v] = rhs_v[vid];
+    }
+
+    this->div_ueRT_X = div_ueRT_X;
+    this->div_ueRT_Y = div_ueRT_Y;
+
+    rhs_u(fixed_id) = 0;
+    rhs_v(fixed_id) = 0;
+
+    Eigen::VectorXd PD_uv_u = cholesky_lap.solve(rhs_u);
+    Eigen::VectorXd PD_uv_v = cholesky_lap.solve(rhs_v);
 
     VertexData<Vector2> ret_uv(mesh);
-    for (Vertex vtx : mesh.vertices()) {
-        int id = vtx.getIndex();
-        ret_uv[vtx] = Vector2({u(id), v(id)});
+
+    for (Vertex v : mesh.vertices()) {
+        int vid = v.getIndex();
+        ret_uv[v].x = PD_uv_u[vid];
+        ret_uv[v].y = PD_uv_v[vid];
     }
 
     this->dp_uv = ret_uv;

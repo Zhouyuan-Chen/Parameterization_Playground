@@ -23,18 +23,20 @@ public:
     VertexData<double> get_bff_u() { return bff_u; }
     VertexData<double> get_dp_u() { return dp_u; }
     VertexData<Vector2> get_dp_uv() { return dp_uv; }
-    FaceData<Vector3> get_dp_wR() { return dp_wR; }
-    VertexData<double> get_dp_div_wR_x() { return div_wR_x; }
-    VertexData<double> get_dp_div_wR_y() { return div_wR_y; }
+    FaceData<Vector3> get_dp_euRT_X() { return dp_euRT_X; }
+    FaceData<Vector3> get_dp_euRT_Y() { return dp_euRT_Y; }
+    VertexData<double> get_dp_div_ueRT_X() { return div_ueRT_X; }
+    VertexData<double> get_dp_div_ueRT_Y() { return div_ueRT_Y; }
 
 private:
     VertexData<Vector2> bff_uv;
     VertexData<double> bff_u;
     VertexData<double> dp_u;
     VertexData<Vector2> dp_uv;
-    FaceData<Vector3> dp_wR;
-    VertexData<double> div_wR_x;
-    VertexData<double> div_wR_y;
+    FaceData<Vector3> dp_euRT_X;
+    FaceData<Vector3> dp_euRT_Y;
+    VertexData<double> div_ueRT_X;
+    VertexData<double> div_ueRT_Y;
 };
 
 } // namespace parameterization_playground
