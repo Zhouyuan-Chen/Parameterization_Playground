@@ -56,7 +56,7 @@ int main(int argc, char** argv)
         }
     }
 
-    std::cout << bnd_num;
+    // std::cout << bnd_num;
 
     // for (Vertex v : mesh->vertices()) {
     //     if (v.isBoundary()) {
@@ -75,18 +75,18 @@ int main(int argc, char** argv)
         //     {Vector2({0, 0}), Vector2({1, 0}), Vector2({1, 1}), Vector2({0, 1})});
 
         // Triangle
-        std::vector<Vector2> shape({Vector2({0, 0}), Vector2({1, 0}), Vector2({0, 1})});
+        // std::vector<Vector2> shape({Vector2({0, 0}), Vector2({1, 0}), Vector2({0, 1})});
 
         // L
-        // std::vector<Vector2> shape(
-        //     {Vector2({0, 0}),
-        //      Vector2({1, 0}),
-        //      Vector2({2, 0}),
-        //      Vector2({2, 1}),
-        //      Vector2({2, 2}),
-        //      Vector2({1, 2}),
-        //      Vector2({1, 1}),
-        //      Vector2({0, 1})});
+        std::vector<Vector2> shape(
+            {Vector2({0, 0}),
+             Vector2({1, 0}),
+             Vector2({2, 0}),
+             Vector2({2, 1}),
+             Vector2({2, 2}),
+             Vector2({1, 2}),
+             Vector2({1, 1}),
+             Vector2({0, 1})});
 
         // Disk
         // std::vector<Vector2> shape;
@@ -95,8 +95,7 @@ int main(int argc, char** argv)
         //     shape.push_back(Vector2({cos(t * 2 * M_PI), sin(t * 2 * M_PI)}));
         // }
 
-        uv =
-            bff.solve(*mesh, *geom, scales, shape, parameterization_playground::BFF::BND_FIT_SHAPE);
+        uv = bff.solve(*mesh, *geom, shape);
     }
 
     polyscope::registerSurfaceMesh("3D domain", geom->vertexPositions, mesh->getFaceVertexList());

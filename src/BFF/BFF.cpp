@@ -11,11 +11,11 @@ inline double angle2pi(const Vector2& u, const Vector2& v)
     Vector2 vv = unit(v);
 
     double dot_val = std::fmax(-1., std::fmin(1., dot(uu, vv)));
-    double ang = std::acos(dot_val); // in [0, π]
+    double ang = std::acos(dot_val);
 
     double cross_val = uu.x * vv.y - uu.y * vv.x;
     if (cross_val < 0) {
-        ang = 2.0 * M_PI - ang; // flip to [π, 2π)
+        ang = 2.0 * M_PI - ang;
     }
     return ang;
 }
@@ -28,6 +28,13 @@ VertexData<Vector2> BFF::solve(
 {
     std::vector<Vector2> shape;
     return solve(mesh, geom, constraint, shape, type);
+}
+
+VertexData<Vector2>
+BFF::solve(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, std::vector<Vector2>& shape)
+{
+    VertexData<double> constraint(mesh, 0);
+    return solve(mesh, geom, constraint, shape, BND_FIT_SHAPE);
 }
 
 VertexData<Vector2> BFF::solve(
@@ -164,6 +171,7 @@ VertexData<Vector2> BFF::solve(
         shape_accumulate_len.push_back(target_len_sum);
 
         for (int itr = 0; itr < 10; itr++) {
+            std::cout << "itr=" << itr << std::endl;
             target_h_pre = target_h;
             // compute lengths
             double cur_len_sum = 0.0;
@@ -196,21 +204,19 @@ VertexData<Vector2> BFF::solve(
             for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
                 double t = cur_cumlen[he.tailVertex()] / cur_len_sum * target_len_sum;
 
-                for (int i = 0; i < shape_accumulate_len.size() - 1; i++) {
+                for (int i = 0; i < shape_accumulate_len.size(); i++) {
                     double low_bound = shape_accumulate_len[i];
-                    double high_bound = shape_accumulate_len[i + 1];
+                    double high_bound = (i == shape_accumulate_len.size() - 1)
+                                            ? target_len_sum
+                                            : shape_accumulate_len[i + 1];
 
                     if (t >= low_bound && t <= high_bound) {
                         double alpha = (t - low_bound) / (high_bound - low_bound);
                         int id = bvid[he.tailVertex()];
 
-                        if (i == shape_accumulate_len.size() - 1) {
-                            z_bnd[id] = (1 - alpha) * shape[i] + alpha * shape[0];
-                            std::cout << z_bnd[id].x << " " << z_bnd[id].y << std::endl;
-                        } else {
-                            z_bnd[id] = (1 - alpha) * shape[i] + alpha * shape[i + 1];
-                            std::cout << z_bnd[id].x << " " << z_bnd[id].y << std::endl;
-                        }
+                        int next_i = (i + 1) % shape.size();
+                        z_bnd[id] = (1 - alpha) * shape[i] + alpha * shape[next_i];
+                        break;
                     }
                 }
             }
@@ -238,8 +244,8 @@ VertexData<Vector2> BFF::solve(
                 // target_h_pre[id_j] = target_h[id_j]; // store previous
                 target_h[id_j] = PI - theta;
                 totalAngle += target_h[id_j];
-                std::cout << target_h[id_j] / M_PI << std::endl;
-                std::cout << z_bnd[id_j].x << " " << z_bnd[id_j].y << std::endl;
+                // std::cout << theta / M_PI << std::endl;
+                // std::cout << z_bnd[id_j].x << " " << z_bnd[id_j].y << std::endl;
             }
 
             // orientation fix
@@ -319,6 +325,7 @@ VertexData<Vector2> BFF::solve(
         for (Vertex v : mesh.vertices()) {
             uv[v].x *= -1;
         }
+
         return uv;
 
     } else {
@@ -382,6 +389,17 @@ VertexData<Vector2> BFF::solve(
         } else {
             int id = ivid[v];
             uv[v] = Vector2{U_interior_u[id], U_interior_v[id]};
+        }
+    }
+
+    result_u = VertexData<double>(mesh);
+    for (Vertex v : mesh.vertices()) {
+        if (v.isBoundary()) {
+            int id = bvid[v];
+            result_u[v] = u_boundary(id);
+        } else {
+            int id = ivid[v];
+            result_u[v] = u_interior(id);
         }
     }
 

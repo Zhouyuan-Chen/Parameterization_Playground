@@ -1,4 +1,5 @@
 #include "DP.hpp"
+#include "unsupported/Eigen/MatrixFunctions"
 
 namespace parameterization_playground {
 DP::DP() {}
@@ -7,36 +8,32 @@ DP::~DP() {}
 VertexData<Vector2> DP::solve(
     ManifoldSurfaceMesh& mesh,
     VertexPositionGeometry& geom,
-    VertexData<double>& constraint,
-    ConstraintType type)
+    std::vector<Vector2>& deformed_shape)
 {
+    BFF bff;
+    VertexData<Vector2> bff_uv = bff.solve(mesh, geom, deformed_shape);
+    this->bff_uv = bff_uv;
+
+    VertexData<double> bff_u = bff.get_u();
+    this->bff_u = bff_u;
+
+    std::cout << "here" << std::endl;
+
+    VertexData<Vector2> uv(mesh);
     VertexData<int> bvid(mesh);
     VertexData<int> ivid(mesh);
-
     auto isInterior = Vector<bool>(mesh.nVertices());
-
-    // compute curvatures
-    geom.requireVertexGaussianCurvatures();
-    geom.requireVertexAngleSums();
-    geom.requireEdgeLengths();
-    VertexData<double> vertex_gaussian_curvatures(mesh, 0);
     int bid = 0, iid = 0;
     for (Vertex v : mesh.vertices()) {
         if (v.isBoundary()) {
-            vertex_gaussian_curvatures[v] = 1. * PI - geom.vertexAngleSums[v];
             isInterior[bid + iid] = false;
             bvid[v] = bid++;
         } else {
-            vertex_gaussian_curvatures[v] = 2. * PI - geom.vertexAngleSums[v];
             isInterior[bid + iid] = true;
             ivid[v] = iid++;
         }
     }
-
-    // aproximate Yamabe
-    // Au = Omega - [0 , h]^T
-    // h = k - k^*
-
+    geom.requireEdgeLengths();
     geom.requireCotanLaplacian();
     SparseMatrix<double> A(mesh.nVertices(), mesh.nVertices());
     SparseMatrix<double> L = geom.cotanLaplacian;
@@ -48,145 +45,184 @@ VertexData<Vector2> DP::solve(
     auto ABB = Adecomp.BB;
     Eigen::SimplicialLLT<SparseMatrix<double>> cholesky_AII;
     cholesky_AII.compute(AII);
-    SparseMatrix<double> schur = ABB - ABI * cholesky_AII.solve(AIB);
-    Eigen::SimplicialLDLT<SparseMatrix<double>> cholesky_schur;
-    cholesky_schur.compute(schur);
 
-    Vector<double> OmegaI(iid);
-    for (Vertex v : mesh.vertices()) {
-        if (!v.isBoundary()) {
-            int id = ivid[v];
-            OmegaI[id] = vertex_gaussian_curvatures[v];
-        }
-    }
-    Vector<double> OmegaB(bid);
+    Eigen::VectorXd boundary_u_vec(bid);
     for (Vertex v : mesh.vertices()) {
         if (v.isBoundary()) {
             int id = bvid[v];
-            OmegaB[id] = vertex_gaussian_curvatures[v];
+            boundary_u_vec[id] = bff_u[v];
         }
     }
 
+    Eigen::VectorXd interior_u_vec = cholesky_AII.solve(-AIB * boundary_u_vec);
 
-    Eigen::VectorXd u_boundary(bid);
-    Eigen::VectorXd u_interior(iid);
-    Eigen::VectorXd h(bid);
-    VertexData<double> target_curvature(mesh, 0);
-
-    if (type == BND_SCALE) {
-        for (Vertex v : mesh.vertices()) {
-            if (v.isBoundary()) {
-                int id = bvid[v];
-                u_boundary[id] = constraint[v];
-            }
-        }
-        u_interior = cholesky_AII.solve((OmegaI - AIB * u_boundary));
-        h = OmegaB - ABI * u_interior - ABB * u_boundary;
-
-
-        int cnt = 0;
-        for (Vertex v : mesh.vertices()) {
-            if (v.isBoundary()) {
-                // target_curvature[v] = OmegaB[cnt] - h[cnt];
-                target_curvature[v] = h[cnt++];
-                // target_curvature[v] = 6.28 / (boundary_num * 0.1);
-            }
-        }
-
-    } else if (type == BND_CURVATURE) {
-        for (Vertex v : mesh.vertices()) {
-            if (v.isBoundary()) {
-                int id = bvid[v];
-                h[id] = constraint[v];
-            }
-        }
-
-        int interior_num = iid;
-        int boundary_num = bid;
-
-        Vector<double> schur_rhs = OmegaB - h - ABI * cholesky_AII.solve(OmegaI);
-        u_boundary = -cholesky_schur.solve(schur_rhs);
-
-        double mean_u_boundary = u_boundary.mean();
-        for (int i = 0; i < u_boundary.size(); i++) {
-            u_boundary[i] -= mean_u_boundary;
-        }
-
-        // geometrycentral::surface::BFF ref_bff(mesh, geom);
-        // u_boundary = ref_bff.neumannToDirichlet(h);
-
-        int cnt = 0;
-        for (Vertex v : mesh.vertices()) {
-            if (v.isBoundary()) {
-                target_curvature[v] = h[bvid[v]];
-            }
-        }
-    } else {
-        std::cout << "error: wrong constraint type for BFF" << std::endl;
-        exit(1);
-    }
-
-    // DenseMatrix<double> T(2, boundary_num);
-    // SparseMatrix<double> N(boundary_num, boundary_num);
-    // Vector<double> targetLength(mesh);
-
-    Eigen::MatrixXd T(2, bid);
-    Eigen::SparseMatrix<double> N(bid, bid);
-    Eigen::VectorXd targetLength(bid);
-
-    double phi = 0;
-    for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
-        int id = bvid[he.vertex()];
-        N.coeffRef(id, id) = geom.edgeLengths[he.edge()];
-        T(0, id) = cos(phi);
-        T(1, id) = sin(phi);
-        targetLength(id) =
-            exp((u_boundary[bvid[he.tipVertex()]] + u_boundary(bvid[he.tailVertex()])) * 0.5) *
-            geom.edgeLength(he.edge());
-        phi += target_curvature[he.tipVertex()];
-    }
-
-    Vector<double> roundedLength =
-        targetLength - N * T.transpose() * (T * N * T.transpose()).inverse() * (T * targetLength);
-
-
-    VertexData<Vector2> uv(mesh);
-    double u = 0;
-    double v = 0;
-    for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
-        int id = bvid[he.vertex()];
-        uv[he.tailVertex()].x = u;
-        uv[he.tailVertex()].y = v;
-
-        u += roundedLength(id) * T(0, id);
-        v += roundedLength(id) * T(1, id);
-    }
-
-    Eigen::VectorXd U_boundary_u(bid);
-    Eigen::VectorXd U_boundary_v(bid);
-    Vector<double> position_u(bid);
-    Vector<double> position_v(bid);
-    {
-        for (Halfedge he : mesh.boundaryLoop(0).adjacentHalfedges()) {
-            U_boundary_u(bvid[he.tailVertex()]) = -uv[he.tailVertex()].x;
-            U_boundary_v(bvid[he.tailVertex()]) = uv[he.tailVertex()].y;
-        }
-    }
-
-    Eigen::VectorXd U_interior_u = cholesky_AII.solve(-AIB * U_boundary_u);
-    Eigen::VectorXd U_interior_v = cholesky_AII.solve(-AIB * U_boundary_v);
-
+    VertexData<double> PD_u(mesh);
     for (Vertex v : mesh.vertices()) {
         if (v.isBoundary()) {
             int id = bvid[v];
-            uv[v] = Vector2{U_boundary_u[id], U_boundary_v[id]};
+            PD_u[v] = boundary_u_vec[id];
         } else {
             int id = ivid[v];
-            uv[v] = Vector2{U_interior_u[id], U_interior_v[id]};
+            PD_u[v] = interior_u_vec[id];
         }
     }
 
-    return uv;
+    this->dp_u = PD_u;
+
+    geom.requireFaceNormals();
+    geom.requireEdgeCotanWeights();
+    EdgeData<double> w12_list(mesh);
+    for (Edge edge : mesh.edges()) {
+        if (!edge.isBoundary()) {
+            Halfedge he = edge.halfedge();
+            double ui = PD_u[he.tailVertex()];
+            double uj = PD_u[he.tipVertex()];
+            double cot_w = geom.edgeCotanWeight(edge);
+            w12_list[edge] = cot_w * (uj - ui);
+        }
+    }
+
+    std::cout << "here" << std::endl;
+
+    EdgeData<Eigen::Matrix2<double>> w(mesh);
+    for (Edge edge : mesh.edges()) {
+        if (!edge.isBoundary()) {
+            double w12_int = w12_list[edge];
+            w[edge](0, 0) = 0;
+            w[edge](0, 1) = w12_int;
+            w[edge](1, 0) = -w12_int;
+            w[edge](1, 1) = 0;
+        }
+    }
+    std::cout << "here" << std::endl;
+
+    // only work for 2D for now
+    FaceData<Eigen::Matrix2<double>> R(mesh);
+    R[mesh.face(229)] = Eigen::Matrix2<double>::Identity();
+    FaceData<bool> visited_tag(mesh, false);
+    visited_tag[mesh.face(229)] = true;
+
+    while (true) {
+        bool all_assigned = true;
+        for (Edge edge : mesh.edges()) {
+            if (!edge.isBoundary()) {
+                Halfedge he = edge.halfedge();
+                if (!visited_tag[he.face()] && visited_tag[he.twin().face()]) {
+                    all_assigned = false;
+                    Eigen::Matrix2d Rt = R[he.twin().face()];
+                    Eigen::Matrix2d w_int = w[he.edge()];
+                    R[he.face()] = (-w_int).exp() * Rt;
+                    visited_tag[he.face()] = true;
+                } else if (visited_tag[he.face()] && !visited_tag[he.twin().face()]) {
+                    all_assigned = false;
+                    Eigen::Matrix2<double> R0 = R[he.face()];
+                    Eigen::Matrix2<double> w_int = w[he.edge()];
+                    R[he.twin().face()] = w_int.exp() * R0;
+                    visited_tag[he.twin().face()] = true;
+                }
+            }
+        }
+        if (all_assigned) {
+            break;
+        }
+    }
+
+    FaceData<Vector3> dir(mesh);
+
+    for (Face f : mesh.faces()) {
+        double w = 0;
+        for (Halfedge he : f.adjacentHalfedges()) {
+        }
+        Eigen::Matrix2d Rf = R[f].transpose();
+        Eigen::Vector2d v = Rf.col(0);
+        // v.normalize();
+        dir[f].x = v.x();
+        dir[f].y = v.y();
+        dir[f].z = 0;
+    }
+
+    this->dp_wR = dir;
+
+    // Eigen::SparseMatrix<double> grad_m = geom.polygonGradientMatrix;
+
+    Eigen::VectorXd frame(3 * mesh.nFaces());
+
+    for (Face f : mesh.faces()) {
+        int id = f.getIndex();
+        double eu = 0;
+        for (Halfedge he : f.adjacentHalfedges()) {
+            eu += PD_u[he.tipVertex()];
+        }
+        eu /= 3.0;
+
+        frame[id * 3] = dir[f].x;
+        frame[id * 3 + 1] = dir[f].y;
+        frame[id * 3 + 2] = 0;
+    }
+
+    geom.requirePolygonDivergenceMatrix();
+    geom.requireCotanLaplacian();
+
+    auto lap_m = geom.cotanLaplacian;
+    auto div_m = geom.polygonDivergenceMatrix;
+
+    Eigen::VectorXd frame_x(mesh.nFaces() * 3);
+    Eigen::VectorXd frame_y(mesh.nFaces() * 3);
+    for (Face f : mesh.faces()) {
+        int id = f.getIndex();
+        frame_x(id * 3) = frame[id * 3];
+        frame_x(id * 3 + 1) = 0;
+        frame_x(id * 3 + 2) = 0;
+        frame_y(id * 3) = frame[id * 3 + 1];
+        frame_y(id * 3 + 1) = 0;
+        frame_y(id * 3 + 2) = 0;
+    }
+
+    std::cout << frame_x.size() << std::endl;
+    std::cout << div_m.rows() << " " << div_m.cols() << std::endl;
+
+
+    Eigen::VectorXd div_x = div_m * frame_x;
+    Eigen::VectorXd div_y = div_m * frame_y;
+
+
+    VertexData<double> div_wR_x(mesh);
+    VertexData<double> div_wR_y(mesh);
+    for (Vertex v : mesh.vertices()) {
+        int id = v.getIndex();
+        div_wR_x[v] = div_x(id);
+        div_wR_y[v] = div_y(id);
+    }
+
+    this->div_wR_x = div_wR_x;
+    this->div_wR_y = div_wR_y;
+
+    int fixed_id = 0;
+    for (int i = 0; i < lap_m.cols(); i++) {
+        lap_m.coeffRef(fixed_id, i) = 0;
+    }
+    lap_m.coeffRef(fixed_id, fixed_id) = 1.0;
+    div_x(fixed_id) = 0.0;
+    div_y(fixed_id) = 0.0;
+
+    Eigen::SimplicialLLT<SparseMatrix<double>> cholesky_uv;
+    cholesky_uv.compute(lap_m);
+
+
+    std::cout << lap_m.rows() << " " << lap_m.cols() << std::endl;
+
+    Eigen::VectorXd u = cholesky_uv.solve(div_x);
+    Eigen::VectorXd v = cholesky_uv.solve(div_y);
+    std::cout << "finished" << std::endl;
+
+    VertexData<Vector2> ret_uv(mesh);
+    for (Vertex vtx : mesh.vertices()) {
+        int id = vtx.getIndex();
+        ret_uv[vtx] = Vector2({u(id), v(id)});
+    }
+
+    this->dp_uv = ret_uv;
+    return ret_uv;
 }
 
 } // namespace parameterization_playground

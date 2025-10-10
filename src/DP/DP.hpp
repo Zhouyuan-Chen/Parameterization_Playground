@@ -1,15 +1,6 @@
 #pragma once
 
-#include "geometrycentral/numerical/linear_algebra_utilities.h"
-#include "geometrycentral/numerical/linear_solvers.h"
-#include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "geometrycentral/surface/meshio.h"
-#include "geometrycentral/surface/simple_polygon_mesh.h"
-#include "geometrycentral/surface/surface_mesh_factories.h"
-#include "geometrycentral/surface/surface_point.h"
-#include "geometrycentral/surface/vertex_position_geometry.h"
-
-#include <Eigen/SparseCholesky>
+#include "BFF/BFF.hpp"
 
 
 using namespace geometrycentral;
@@ -23,13 +14,27 @@ public:
     DP();
     ~DP();
 
-    enum ConstraintType { BND_SCALE, BND_CURVATURE };
-
     VertexData<Vector2> solve(
         ManifoldSurfaceMesh& mesh,
         VertexPositionGeometry& geom,
-        VertexData<double>& constraint,
-        ConstraintType type);
+        std::vector<Vector2>& deformed_shape);
+
+    VertexData<Vector2> get_bff_uv() { return bff_uv; }
+    VertexData<double> get_bff_u() { return bff_u; }
+    VertexData<double> get_dp_u() { return dp_u; }
+    VertexData<Vector2> get_dp_uv() { return dp_uv; }
+    FaceData<Vector3> get_dp_wR() { return dp_wR; }
+    VertexData<double> get_dp_div_wR_x() { return div_wR_x; }
+    VertexData<double> get_dp_div_wR_y() { return div_wR_y; }
+
+private:
+    VertexData<Vector2> bff_uv;
+    VertexData<double> bff_u;
+    VertexData<double> dp_u;
+    VertexData<Vector2> dp_uv;
+    FaceData<Vector3> dp_wR;
+    VertexData<double> div_wR_x;
+    VertexData<double> div_wR_y;
 };
 
 } // namespace parameterization_playground

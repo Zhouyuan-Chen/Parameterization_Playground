@@ -30,12 +30,20 @@ public:
         VertexData<double>& constraint,
         ConstraintType type);
 
+    VertexData<Vector2>
+    solve(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, std::vector<Vector2>& shape);
+
     VertexData<Vector2> solve(
         ManifoldSurfaceMesh& mesh,
         VertexPositionGeometry& geom,
         VertexData<double>& constraint,
         std::vector<Vector2>& shape,
         ConstraintType type);
+
+    VertexData<double> get_u() { return result_u; }
+
+private:
+    VertexData<double> result_u;
 };
 
 } // namespace parameterization_playground
