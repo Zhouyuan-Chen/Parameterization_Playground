@@ -35,22 +35,22 @@ int main(int argc, char** argv)
         }
     }
     // Disk
-    std::vector<Vector2> shape;
-    for (int i = 0; i < bnd_num; i++) {
-        double t = (i * 1.0) / (bnd_num * 1.0);
-        shape.push_back(Vector2({cos(t * 2 * M_PI), sin(t * 2 * M_PI)}));
-    }
+    // std::vector<Vector2> shape;
+    // for (int i = 0; i < bnd_num; i++) {
+    //     double t = (i * 1.0) / (bnd_num * 1.0);
+    //     shape.push_back(Vector2({cos(t * 2 * M_PI), sin(t * 2 * M_PI)}));
+    // }
 
 
-    // std::vector<Vector2> shape(
-    //     {Vector2({0, 0}),
-    //      Vector2({1, 0}),
-    //      Vector2({2, 0}),
-    //      Vector2({2, 1}),
-    //      Vector2({2, 2}),
-    //      Vector2({1, 2}),
-    //      Vector2({1, 1}),
-    //      Vector2({0, 1})});
+    std::vector<Vector2> shape(
+        {Vector2({0, 0}),
+         Vector2({1, 0}),
+         Vector2({2, 0}),
+         Vector2({2, 1}),
+         Vector2({2, 2}),
+         Vector2({1, 2}),
+         Vector2({1, 1}),
+         Vector2({0, 1})});
 
     parameterization_playground::DP dp;
     auto dp_uv = dp.solve(*mesh, *geom, shape);

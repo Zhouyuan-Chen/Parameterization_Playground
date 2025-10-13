@@ -17,8 +17,6 @@ VertexData<Vector2> DP::solve(
     VertexData<double> bff_u = bff.get_u();
     this->bff_u = bff_u;
 
-    std::cout << "here" << std::endl;
-
     VertexData<Vector2> uv(mesh);
     VertexData<int> bvid(mesh);
     VertexData<int> ivid(mesh);
@@ -82,8 +80,6 @@ VertexData<Vector2> DP::solve(
         }
     }
 
-    std::cout << "here" << std::endl;
-
     EdgeData<Eigen::Matrix2<double>> w(mesh);
     for (Edge edge : mesh.edges()) {
         if (!edge.isBoundary()) {
@@ -94,7 +90,6 @@ VertexData<Vector2> DP::solve(
             w[edge](1, 1) = 0;
         }
     }
-    std::cout << "here" << std::endl;
 
     // only work for 2D for now
     FaceData<Eigen::Matrix2<double>> R(mesh);
