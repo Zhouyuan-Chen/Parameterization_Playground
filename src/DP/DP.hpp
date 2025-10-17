@@ -2,6 +2,7 @@
 
 #include "BFF/BFF.hpp"
 
+#include "unsupported/Eigen/MatrixFunctions"
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -27,6 +28,7 @@ public:
     FaceData<Vector3> get_dp_euRT_Y() { return dp_euRT_Y; }
     VertexData<double> get_dp_div_ueRT_X() { return div_ueRT_X; }
     VertexData<double> get_dp_div_ueRT_Y() { return div_ueRT_Y; }
+    FaceData<double> get_test() { return test; }
 
 private:
     VertexData<Vector2> bff_uv;
@@ -37,6 +39,8 @@ private:
     FaceData<Vector3> dp_euRT_Y;
     VertexData<double> div_ueRT_X;
     VertexData<double> div_ueRT_Y;
+
+    FaceData<double> test;
 };
 
 } // namespace parameterization_playground

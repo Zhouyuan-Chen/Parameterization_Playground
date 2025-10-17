@@ -41,7 +41,6 @@ int main(int argc, char** argv)
     //     shape.push_back(Vector2({cos(t * 2 * M_PI), sin(t * 2 * M_PI)}));
     // }
 
-
     std::vector<Vector2> shape(
         {Vector2({0, 0}),
          Vector2({1, 0}),
@@ -55,13 +54,16 @@ int main(int argc, char** argv)
     parameterization_playground::DP dp;
     auto dp_uv = dp.solve(*mesh, *geom, shape);
 
-    FaceData<double> test(*mesh, 0);
-    test[mesh->face(229)] = 1;
+    FaceData<double> test(*mesh);
+    double testi = 0;
+
+    for (Face f : mesh->faces()) {
+        test[f] = testi++;
+    }
 
     polyscope::registerSurfaceMesh("3D domain", geom->vertexPositions, mesh->getFaceVertexList());
     polyscope::getSurfaceMesh("3D domain")->addVertexParameterizationQuantity("uv", dp_uv);
-    polyscope::getSurfaceMesh("3D domain")->addVertexScalarQuantity("u", dp.get_bff_u());
-    polyscope::getSurfaceMesh("3D domain")->addFaceScalarQuantity("test", test);
+    polyscope::getSurfaceMesh("3D domain")->addVertexScalarQuantity("u", dp.get_dp_u());
     polyscope::getSurfaceMesh("3D domain")
         ->addVertexScalarQuantity("wR_div_x", dp.get_dp_div_ueRT_X());
     polyscope::getSurfaceMesh("3D domain")
@@ -72,7 +74,7 @@ int main(int argc, char** argv)
 
     polyscope::registerSurfaceMesh2D("2D domain", dp_uv, mesh->getFaceVertexList());
     polyscope::getSurfaceMesh("2D domain")->addVertexParameterizationQuantity("uv", dp_uv);
-    polyscope::getSurfaceMesh("2D domain")->addVertexScalarQuantity("u", dp.get_bff_u());
+    polyscope::getSurfaceMesh("2D domain")->addVertexScalarQuantity("u", dp.get_dp_u());
 
     polyscope::show();
 

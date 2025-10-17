@@ -12,6 +12,8 @@
 
 #include "BFF/BFF.hpp"
 
+#include "geometrycentral/surface/boundary_first_flattening.h"
+
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
@@ -39,20 +41,27 @@ int main(int argc, char** argv)
     double bnd_num = 0;
     for (Vertex v : mesh->vertices()) {
         if (v.isBoundary()) {
-            if (bnd_num == 0) {
+            bnd_num++;
+        }
+    }
+
+    int itr = 0;
+    for (Vertex v : mesh->vertices()) {
+        if (v.isBoundary()) {
+            if (itr == 0) {
                 curvatures[v] = PI * 0.5;
-            } else if (bnd_num == 17) {
+            } else if (itr == int(bnd_num / 6)) {
                 curvatures[v] = PI * 0.5;
-            } else if (bnd_num == 33) {
+            } else if (itr == int(bnd_num / 6 * 2)) {
                 curvatures[v] = PI * 0.5;
-            } else if (bnd_num == 49) {
+            } else if (itr == int(bnd_num / 6 * 3)) {
                 curvatures[v] = -PI * 0.5;
-            } else if (bnd_num == 66) {
+            } else if (itr == int(bnd_num / 6 * 4)) {
                 curvatures[v] = PI * 0.5;
-            } else if (bnd_num == 82) {
+            } else if (itr == int(bnd_num / 6 * 5)) {
                 curvatures[v] = PI * 0.5;
             }
-            bnd_num++;
+            itr++;
         }
     }
 
