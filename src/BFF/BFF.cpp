@@ -69,6 +69,8 @@ VertexData<Vector2> BFF::solve(
         }
     }
 
+    this->curvature = vertex_gaussian_curvatures;
+
     // aproximate Yamabe
     // Au = Omega - [0 , h]^T
     // h = k - k^*

@@ -70,11 +70,19 @@ int main(int argc, char** argv)
         ->addVertexScalarQuantity("wR_div_y", dp.get_dp_div_ueRT_Y());
     polyscope::getSurfaceMesh("3D domain")->addFaceVectorQuantity("euRT_X", dp.get_dp_euRT_X());
     polyscope::getSurfaceMesh("3D domain")->addFaceVectorQuantity("euRT_Y", dp.get_dp_euRT_Y());
+    polyscope::getSurfaceMesh("3D domain")->addVertexScalarQuantity("lap_u", dp.get_dp_lap_u());
 
 
     polyscope::registerSurfaceMesh2D("2D domain", dp_uv, mesh->getFaceVertexList());
     polyscope::getSurfaceMesh("2D domain")->addVertexParameterizationQuantity("uv", dp_uv);
     polyscope::getSurfaceMesh("2D domain")->addVertexScalarQuantity("u", dp.get_dp_u());
+    polyscope::getSurfaceMesh("2D domain")->addVertexScalarQuantity("lap_u", dp.get_dp_lap_u());
+
+    polyscope::registerSurfaceMesh2D("BFF 2D domain", dp.get_bff_uv(), mesh->getFaceVertexList());
+    // polyscope::getSurfaceMesh("BFF 2D domain")->addVertexParameterizationQuantity("uv", dp_uv);
+    // polyscope::getSurfaceMesh("BFF 2D domain")->addVertexScalarQuantity("u", dp.get_dp_u());
+    // polyscope::getSurfaceMesh("BFF 2D domain")->addVertexScalarQuantity("lap_u",
+    // dp.get_dp_lap_u());
 
     polyscope::show();
 

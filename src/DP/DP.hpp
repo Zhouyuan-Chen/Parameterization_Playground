@@ -28,6 +28,8 @@ public:
     FaceData<Vector3> get_dp_euRT_Y() { return dp_euRT_Y; }
     VertexData<double> get_dp_div_ueRT_X() { return div_ueRT_X; }
     VertexData<double> get_dp_div_ueRT_Y() { return div_ueRT_Y; }
+    VertexData<double> get_dp_lap_u() { return dp_lap_u; }
+
     FaceData<double> get_test() { return test; }
 
 private:
@@ -39,6 +41,7 @@ private:
     FaceData<Vector3> dp_euRT_Y;
     VertexData<double> div_ueRT_X;
     VertexData<double> div_ueRT_Y;
+    VertexData<double> dp_lap_u;
 
     FaceData<double> test;
 };

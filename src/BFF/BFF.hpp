@@ -41,9 +41,11 @@ public:
         ConstraintType type);
 
     VertexData<double> get_u() { return result_u; }
+    VertexData<double> get_k() { return curvature; }
 
 private:
     VertexData<double> result_u;
+    VertexData<double> curvature;
 };
 
 } // namespace parameterization_playground

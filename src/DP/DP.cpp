@@ -54,7 +54,16 @@ VertexData<Vector2> DP::solve(
         }
     }
 
-    Eigen::VectorXd interior_u_vec = cholesky_AII.solve(-AIB * boundary_u_vec);
+    VertexData<double> vertex_k = bff.get_k();
+    Eigen::VectorXd int_k(iid);
+    for (Vertex v : mesh.vertices()) {
+        if (!v.isBoundary()) {
+            int id = ivid[v];
+            int_k[id] = vertex_k[v];
+        }
+    }
+
+    Eigen::VectorXd interior_u_vec = cholesky_AII.solve(-AIB * boundary_u_vec - int_k);
 
     VertexData<double> PD_u(mesh);
     for (Vertex v : mesh.vertices()) {
@@ -67,34 +76,48 @@ VertexData<Vector2> DP::solve(
         }
     }
 
+    // PD_u = bff.get_u();
+
     this->dp_u = PD_u;
+
+    Eigen::VectorXd u_vec(mesh.nVertices());
+    for (Vertex v : mesh.vertices()) {
+        u_vec[v.getIndex()] = PD_u[v];
+    }
+    Eigen::VectorXd lap_vec = geom.cotanLaplacian * u_vec;
+    VertexData<double> lap_u(mesh);
+    for (Vertex v : mesh.vertices()) {
+        lap_u[v] = lap_vec[v.getIndex()];
+    }
+    this->dp_lap_u = lap_u;
 
     geom.requireFaceNormals();
     geom.requireEdgeCotanWeights();
-    EdgeData<double> w12_list(mesh);
-    for (Edge edge : mesh.edges()) {
-        if (!edge.isBoundary()) {
-            Halfedge he = edge.halfedge();
+    HalfedgeData<double> w12_list(mesh);
+    for (Halfedge he : mesh.halfedges()) {
+        if (!he.edge().isBoundary()) {
             double ui = PD_u[he.tailVertex()];
             double uj = PD_u[he.tipVertex()];
-            double cot_w = geom.edgeCotanWeight(edge);
-            w12_list[edge] = cot_w * (uj - ui);
+            double cot_w = geom.edgeCotanWeight(he.edge());
+            w12_list[he] = cot_w * (uj - ui);
         }
     }
 
-    EdgeData<Eigen::Matrix2<double>> w(mesh);
-    for (Edge edge : mesh.edges()) {
-        if (!edge.isBoundary()) {
-            double w12_int = w12_list[edge];
-            w[edge](0, 0) = 0;
-            w[edge](0, 1) = w12_int;
-            w[edge](1, 0) = -w12_int;
-            w[edge](1, 1) = 0;
+    HalfedgeData<Eigen::Matrix2<double>> w(mesh);
+    for (Halfedge he : mesh.halfedges()) {
+        if (!he.edge().isBoundary()) {
+            double w12_int = w12_list[he];
+            w[he](0, 0) = 0;
+            w[he](0, 1) = w12_int;
+            w[he](1, 0) = -w12_int;
+            w[he](1, 1) = 0;
         }
     }
+
+    geom.requireTransportVectorsAcrossHalfedge();
 
     geom.requireFaceTangentBasis();
-    Eigen::SparseMatrix<double> R_face_basis(mesh.nEdges() * 3 + 2, mesh.nFaces() * 2);
+    Eigen::SparseMatrix<double> R_face_basis(mesh.nEdges() * 2 + 2, mesh.nFaces() * 2);
     std::vector<Eigen::Triplet<double>> triplets;
     triplets.reserve(mesh.nEdges() * 8 + 4);
     for (Edge edge : mesh.edges()) {
@@ -102,46 +125,60 @@ VertexData<Vector2> DP::solve(
             Halfedge he = edge.halfedge();
             Face f0 = he.face();
             Face f1 = he.twin().face();
-            Vector3 f0_bx = geom.faceTangentBasis[f0][0];
-            Vector3 f0_by = geom.faceTangentBasis[f0][1];
-            Vector3 f1_bx = geom.faceTangentBasis[f1][0];
-            Vector3 f1_by = geom.faceTangentBasis[f1][1];
-
             int fid0 = f0.getIndex();
             int fid1 = f1.getIndex();
             int eid = edge.getIndex();
 
-            triplets.emplace_back(eid * 3, fid0 * 2, f0_bx.x);
-            triplets.emplace_back(eid * 3 + 1, fid0 * 2, f0_bx.y);
-            triplets.emplace_back(eid * 3 + 2, fid0 * 2, f0_bx.z);
-            triplets.emplace_back(eid * 3, fid0 * 2 + 1, f0_by.x);
-            triplets.emplace_back(eid * 3 + 1, fid0 * 2 + 1, f0_by.y);
-            triplets.emplace_back(eid * 3 + 2, fid0 * 2 + 1, f0_by.z);
+            // Vector3 f0_bx = geom.faceTangentBasis[f0][0];
+            // Vector3 f0_by = geom.faceTangentBasis[f0][1];
+            // Vector3 f1_bx = geom.faceTangentBasis[f1][0];
+            // Vector3 f1_by = geom.faceTangentBasis[f1][1];
 
 
-            triplets.emplace_back(eid * 3, fid1 * 2, -f1_bx.x);
-            triplets.emplace_back(eid * 3 + 1, fid1 * 2, -f1_bx.y);
-            triplets.emplace_back(eid * 3 + 2, fid1 * 2, -f1_bx.z);
-            triplets.emplace_back(eid * 3, fid1 * 2 + 1, -f1_by.x);
-            triplets.emplace_back(eid * 3 + 1, fid1 * 2 + 1, -f1_by.y);
-            triplets.emplace_back(eid * 3 + 2, fid1 * 2 + 1, -f1_by.z);
+            // triplets.emplace_back(eid * 3, fid0 * 2, f0_bx.x);
+            // triplets.emplace_back(eid * 3 + 1, fid0 * 2, f0_bx.y);
+            // triplets.emplace_back(eid * 3 + 2, fid0 * 2, f0_bx.z);
+            // triplets.emplace_back(eid * 3, fid0 * 2 + 1, f0_by.x);
+            // triplets.emplace_back(eid * 3 + 1, fid0 * 2 + 1, f0_by.y);
+            // triplets.emplace_back(eid * 3 + 2, fid0 * 2 + 1, f0_by.z);
+
+
+            // triplets.emplace_back(eid * 3, fid1 * 2, -f1_bx.x);
+            // triplets.emplace_back(eid * 3 + 1, fid1 * 2, -f1_bx.y);
+            // triplets.emplace_back(eid * 3 + 2, fid1 * 2, -f1_bx.z);
+            // triplets.emplace_back(eid * 3, fid1 * 2 + 1, -f1_by.x);
+            // triplets.emplace_back(eid * 3 + 1, fid1 * 2 + 1, -f1_by.y);
+            // triplets.emplace_back(eid * 3 + 2, fid1 * 2 + 1, -f1_by.z);
+
+            Vector2 rot = geom.transportVectorsAcrossHalfedge[he];
+            triplets.emplace_back(eid * 2, fid0 * 2, rot.x);
+            triplets.emplace_back(eid * 2, fid0 * 2 + 1, -rot.y);
+            triplets.emplace_back(eid * 2 + 1, fid0 * 2, rot.y);
+            triplets.emplace_back(eid * 2 + 1, fid0 * 2 + 1, rot.x);
+
+
+            triplets.emplace_back(eid * 2, fid1 * 2, -1);
+            triplets.emplace_back(eid * 2, fid1 * 2 + 1, 0);
+            triplets.emplace_back(eid * 2 + 1, fid1 * 2, 0);
+            triplets.emplace_back(eid * 2 + 1, fid1 * 2 + 1, -1);
         }
     }
 
-    triplets.emplace_back(mesh.nEdges() * 3, 0, 1);
-    triplets.emplace_back(mesh.nEdges() * 3 + 1, 1, 1);
+    triplets.emplace_back(mesh.nEdges() * 2, 0, 1);
+    triplets.emplace_back(mesh.nEdges() * 2 + 1, 1, 1);
 
     R_face_basis.setFromTriplets(triplets.begin(), triplets.end());
 
-    Eigen::VectorXd rhs = Eigen::VectorXd::Zero(mesh.nEdges() * 3 + 2);
-    rhs[mesh.nEdges() * 3 + 0] = 1.0;
-    rhs[mesh.nEdges() * 3 + 1] = 0.0;
+    Eigen::VectorXd rhs = Eigen::VectorXd::Zero(mesh.nEdges() * 2 + 2);
+    rhs[mesh.nEdges() * 2 + 0] = 1.0;
+    rhs[mesh.nEdges() * 2 + 1] = 0.0;
 
     Eigen::SparseMatrix<double> AtA = R_face_basis.transpose() * R_face_basis;
     Eigen::VectorXd Atb = R_face_basis.transpose() * rhs;
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
     solver.compute(AtA);
     Eigen::VectorXd local_basis = solver.solve(Atb);
+
 
     if (solver.info() != Eigen::Success) {
         std::cerr << "[Error] LDLT decomposition also failed!" << std::endl;
@@ -165,7 +202,7 @@ VertexData<Vector2> DP::solve(
 
         int eq_row = edge.getIndex() * 2;
 
-        Eigen::Matrix2d w_int = w[edge].exp();
+        Eigen::Matrix2d w_int = w[he].exp();
 
         triplets.emplace_back(eq_row, i, 1);
         triplets.emplace_back(eq_row + 1, i + 1, 1);
@@ -207,6 +244,43 @@ VertexData<Vector2> DP::solve(
         R[f] = Rf;
     }
 
+    // try to propogate the field
+    FaceData<bool> is_visted(mesh, false);
+    is_visted[mesh.face(0)] = true;
+    FaceData<Eigen::Vector2d> R_basis_x(mesh);
+    R_basis_x[mesh.face(0)] = Eigen::Vector2d(1, 0);
+    while (true) {
+        bool is_changed = false;
+
+        for (Face f : mesh.faces()) {
+            for (Halfedge he : f.adjacentHalfedges()) {
+                if (!he.edge().isBoundary()) {
+                    Face fa = f;
+                    Face fb = he.twin().face();
+                    if (is_visted[fa] && !is_visted[fb]) {
+                        is_changed = true;
+                        is_visted[fb] = true;
+
+                        Eigen::Vector2d vec_fa = R_basis_x[fa];
+                        Eigen::Matrix2d rot = w[he];
+                        rot = rot.exp();
+
+                        Eigen::Vector2d vec_fb = rot * vec_fa;
+                        Vector2 vec_fb_complex({vec_fa.x(), vec_fb.y()});
+                        vec_fb_complex = geom.transportVectorsAcrossHalfedge[he] * vec_fb_complex;
+                        vec_fb.x() = vec_fb_complex.x;
+                        vec_fb.y() = vec_fb_complex.y;
+                        R_basis_x[fb] = vec_fb;
+                    }
+                }
+            }
+        }
+
+        if (!is_changed) {
+            break;
+        }
+    }
+
     FaceData<Vector3> dp_euR_X(mesh), dp_euR_Y(mesh);
     Eigen::VectorXd dp_euR_X_vec(mesh.nFaces() * 3), dp_euR_Y_vec(mesh.nFaces() * 3);
 
@@ -224,14 +298,18 @@ VertexData<Vector2> DP::solve(
         Eigen::Matrix2d RT = R[f].transpose();
 
         int fid = f.getIndex();
+
+        // least square approach
         Eigen::Vector2d vec({local_basis[2 * fid + 0], local_basis[2 * fid + 1]});
         vec.normalized();
         vec = RT * vec;
         auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
 
 
-        // I found a werid thing for the geometrycentral. tangent basis need to be normalized
-        // afterward ......
+        // // propogation approach
+        // Eigen::Vector2d vec = R_basis_x[f];
+        // auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
+
 
         dp_euR_X[f] =
             (geom.faceTangentBasis[f][0] * vec.x() + geom.faceTangentBasis[f][1] * vec.y())
