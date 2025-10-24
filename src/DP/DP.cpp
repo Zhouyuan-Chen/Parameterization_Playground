@@ -305,11 +305,9 @@ VertexData<Vector2> DP::solve(
         vec = RT * vec;
         auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
 
-
         // // propogation approach
         // Eigen::Vector2d vec = R_basis_x[f];
         // auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
-
 
         dp_euR_X[f] =
             (geom.faceTangentBasis[f][0] * vec.x() + geom.faceTangentBasis[f][1] * vec.y())
@@ -319,7 +317,6 @@ VertexData<Vector2> DP::solve(
             (geom.faceTangentBasis[f][0] * vecr.x() + geom.faceTangentBasis[f][1] * vecr.y())
                 .normalize() *
             eu;
-
 
         dp_euR_X_vec[fid * 3] = dp_euR_X[f].x;
         dp_euR_X_vec[fid * 3 + 1] = dp_euR_X[f].y;
@@ -383,106 +380,176 @@ VertexData<Vector2> DP::solve(
 
     this->dp_uv = ret_uv;
 
-    // geom.requireHalfedgeVectorsInFace();
+    // { // another discretization
+    //     geom.requireHalfedgeVectorsInFace();
 
-    // auto half_edge_projection = [&](Face face, Edge e, Eigen::Vector2d vec) {
-    //     Halfedge he;
-    //     for (Halfedge itr_he : face.adjacentHalfedges()) {
-    //         if (itr_he.edge().getIndex() == e.getIndex()) {
-    //             he = itr_he;
+    //     auto half_edge_projection = [&](Face face, Edge e, Vector3 vec) {
+    //         Halfedge he;
+    //         for (Halfedge itr_he : face.adjacentHalfedges()) {
+    //             if (itr_he.edge().getIndex() == e.getIndex()) {
+    //                 he = itr_he;
+    //             }
+    //         }
+    //         Vector2 a2 = geom.halfedgeVectorsInFace[he].normalize();
+    //         Vector3 a3 =
+    //             (geom.faceTangentBasis[face][0] * a2.x + geom.faceTangentBasis[face][1] * a2.y)
+    //                 .normalize();
+
+
+    //         return dot(a3, vec.normalize());
+    //     };
+
+    //     Eigen::SparseMatrix<double> uv_m(mesh.nEdges() * 2 + 2, mesh.nVertices() * 2);
+    //     Eigen::VectorXd euRTdp(mesh.nEdges() * 2 + 2);
+    //     triplets.clear();
+    //     for (Edge edge : mesh.edges()) {
+    //         Halfedge he = edge.halfedge();
+    //         int i = he.tailVertex().getIndex();
+    //         int j = he.tipVertex().getIndex();
+    //         int e = edge.getIndex();
+
+    //         triplets.emplace_back(e * 2, i * 2, -1);
+    //         triplets.emplace_back(e * 2 + 1, i * 2 + 1, -1);
+    //         triplets.emplace_back(e * 2, j * 2, 1);
+    //         triplets.emplace_back(e * 2 + 1, j * 2 + 1, 1);
+
+    //         if (edge.isBoundary()) {
+    //             Face face =
+    //                 he.face().isDead() || he.face() == Face() ? he.twin().face() : he.face();
+
+    //             if (he.face().isDead() || he.face() == Face()) {
+    //                 he = he.twin();
+    //                 std::cout << "something is happening..." << std::endl;
+    //             }
+
+    //             Eigen::Matrix2d RT = R[face].transpose();
+    //             int fid = face.getIndex();
+    //             Eigen::Vector2d vec = RT.col(0);
+    //             vec.normalized();
+    //             auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
+
+    //             Vector3 vec3 = (geom.faceTangentBasis[face][0] * vec.x() +
+    //                             geom.faceTangentBasis[face][1] * vec.y())
+    //                                .normalize();
+    //             Vector3 vecr3 = (geom.faceTangentBasis[face][0] * vecr.x() +
+    //                              geom.faceTangentBasis[face][1] * vecr.y())
+    //                                 .normalize();
+    //             Vector3 hevec3 =
+    //                 (geom.faceTangentBasis[face][0] * geom.halfedgeVectorsInFace[he].x +
+    //                  geom.faceTangentBasis[face][0] * geom.halfedgeVectorsInFace[he].y)
+    //                     .normalize();
+
+    //             double euij = exp(0.5 * (PD_u[he.tipVertex()] + PD_u[he.tailVertex()]));
+
+    //             Eigen::Vector2d Rijdp(dot(vec3, hevec3), dot(vecr3, hevec3));
+
+    //             // Rijdp(0) = half_edge_projection(
+    //             //     face,
+    //             //     edge,
+    //             //     vec.x() * geom.faceTangentBasis[face][0] +
+    //             //         vec.y() * geom.faceTangentBasis[face][1]);
+    //             // Rijdp(1) = half_edge_projection(
+    //             //     face,
+    //             //     edge,
+    //             //     vecr.x() * geom.faceTangentBasis[face][0] +
+    //             //         vecr.y() * geom.faceTangentBasis[face][1]);
+
+    //             Eigen::Vector2d euRTdpij = euij * Rijdp;
+
+    //             euRTdp[e * 2] = euRTdpij.x();
+    //             euRTdp[e * 2 + 1] = euRTdpij.y();
+    //         } else {
+    //             Eigen::Matrix2d R_i = R[he.face()].transpose();
+    //             Eigen::Matrix2d R_j = R[he.twin().face()].transpose();
+
+    //             double euij = exp(0.5 * (PD_u[he.tipVertex()] + PD_u[he.tailVertex()]));
+
+    //             // Fi
+    //             Face fidi = he.face();
+    //             Eigen::Vector2d veci = R_i.col(0);
+    //             veci.normalized();
+    //             Eigen::Vector2d vecri = R_i.col(1);
+    //             vecri.normalized();
+    //             Vector2 ehvec = geom.halfedgeVectorsInFace[he];
+    //             // double dpix = half_edge_projection(
+    //             //     fidi,
+    //             //     edge,
+    //             //     veci.x() * geom.faceTangentBasis[fidi][0] +
+    //             //         veci.y() * geom.faceTangentBasis[fidi][1]);
+    //             // double dpiy = half_edge_projection(
+    //             //     fidi,
+    //             //     edge,
+    //             //     vecri.x() * geom.faceTangentBasis[fidi][0] +
+    //             //         vecri.y() * geom.faceTangentBasis[fidi][1]);
+
+    //             Vector3 veci3 = (geom.faceTangentBasis[fidi][0] * veci.x() +
+    //                              geom.faceTangentBasis[fidi][1] * veci.y())
+    //                                 .normalize();
+    //             Vector3 vecri3 = (geom.faceTangentBasis[fidi][0] * vecri.x() +
+    //                               geom.faceTangentBasis[fidi][1] * vecri.y())
+    //                                  .normalize();
+    //             Vector3 hevec3 = (geom.faceTangentBasis[fidi][0] * ehvec.x +
+    //                               geom.faceTangentBasis[fidi][1] * ehvec.y)
+    //                                  .normalize();
+    //             double dpix = dot(veci3, hevec3);
+    //             double dpiy = dot(vecri3, hevec3);
+
+
+    //             // Fj
+    //             Face fidj = he.twin().face();
+    //             Eigen::Vector2d vecj = R_j.col(0);
+    //             vecj.normalized();
+    //             Eigen::Vector2d vecrj = R_j.col(1);
+    //             vecrj.normalized();
+    //             // double dpjx = -half_edge_projection(
+    //             //     fidj,
+    //             //     edge,
+    //             //     vecj.x() * geom.faceTangentBasis[fidj][0] +
+    //             //         vecj.y() * geom.faceTangentBasis[fidj][1]);
+    //             // double dpjy = -half_edge_projection(
+    //             //     fidj,
+    //             //     edge,
+    //             //     vecrj.x() * geom.faceTangentBasis[fidj][0] +
+    //             //         vecrj.y() * geom.faceTangentBasis[fidj][1]);
+
+    //             Vector3 vecj3 = (geom.faceTangentBasis[fidj][0] * vecj.x() +
+    //                              geom.faceTangentBasis[fidj][1] * vecj.y())
+    //                                 .normalize();
+    //             Vector3 vecrj3 = (geom.faceTangentBasis[fidj][0] * vecrj.x() +
+    //                               geom.faceTangentBasis[fidj][1] * vecrj.y())
+    //                                  .normalize();
+
+    //             double dpjx = dot(vecj3, hevec3);
+    //             double dpjy = dot(vecrj3, hevec3);
+
+
+    //             Eigen::Vector2d Rijdp(0.5 * (dpix + dpjx), 0.5 * (dpiy + dpjy));
+
+    //             Eigen::Vector2d euRTdpij = euij * Rijdp;
+
+    //             euRTdp[e * 2] = euRTdpij.x();
+    //             euRTdp[e * 2 + 1] = euRTdpij.y();
     //         }
     //     }
-    //     Face f = he.face();
-    //     Vector2 a = geom.halfedgeVectorsInFace[he].normalize();
-    //     Vector2 b = Vector2({vec.x(), vec.y()}).normalize();
-    //     return dot(a, b);
-    // };
+    //     triplets.emplace_back(mesh.nEdges() * 2, fixed_id * 2, 1);
+    //     triplets.emplace_back(mesh.nEdges() * 2 + 1, fixed_id * 2 + 1, 1);
+    //     euRTdp(mesh.nEdges() * 2) = 0;
+    //     euRTdp(mesh.nEdges() * 2 + 1) = 0;
 
-    // Eigen::SparseMatrix<double> uv_m(mesh.nEdges() * 2 + 2, mesh.nVertices() * 2);
-    // Eigen::VectorXd euRTdp(mesh.nEdges() * 2 + 2);
-    // triplets.clear();
-    // for (Edge edge : mesh.edges()) {
-    //     Halfedge he = edge.halfedge();
-    //     int i = he.tailVertex().getIndex();
-    //     int j = he.tipVertex().getIndex();
-    //     int e = edge.getIndex();
+    //     uv_m.setFromTriplets(triplets.begin(), triplets.end());
+    //     uv_m.makeCompressed();
 
-    //     triplets.emplace_back(e * 2, i * 2, 1);
-    //     triplets.emplace_back(e * 2 + 1, i * 2 + 1, 1);
-    //     triplets.emplace_back(e * 2, j * 2, -1);
-    //     triplets.emplace_back(e * 2 + 1, j * 2 + 1, -1);
+    //     solver.compute(uv_m.transpose() * uv_m);
+    //     Eigen::VectorXd new_uv = solver.solve(uv_m.transpose() * euRTdp);
 
-    //     if (edge.isBoundary()) {
-    //         Face face = he.face().isDead() || he.face() == Face() ? he.twin().face() : he.face();
-
-    //         Eigen::Matrix2d RT = R[face].transpose();
-    //         int fid = face.getIndex();
-    //         Eigen::Vector2d vec({local_basis[2 * fid + 0], local_basis[2 * fid + 1]});
-    //         vec.normalized();
-    //         vec = RT * vec;
-    //         auto vecr = Eigen::Vector2d(-vec.y(), vec.x());
-
-    //         double euij = exp(0.5 * (PD_u[he.tipVertex()] + PD_u[he.tailVertex()]));
-
-    //         Eigen::Vector2d Rijdp;
-
-    //         Rijdp(0) = half_edge_projection(face, edge, vec);
-    //         Rijdp(1) = half_edge_projection(face, edge, vecr);
-
-    //         Eigen::Vector2d euRTdpij = euij * Rijdp;
-
-    //         euRTdp[e * 2] = euRTdpij.x();
-    //         euRTdp[e * 2 + 1] = euRTdpij.y();
-    //     } else {
-    //         Eigen::Matrix2d R_i = R[he.face()];
-    //         Eigen::Matrix2d R_j = R[he.twin().face()];
-
-    //         double euij = exp(0.5 * (PD_u[he.tipVertex()] + PD_u[he.tailVertex()]));
-
-    //         // Fi
-    //         int fidi = he.face().getIndex();
-    //         Eigen::Vector2d veci({local_basis[2 * fidi + 0], local_basis[2 * fidi + 1]});
-    //         veci.normalized();
-    //         veci = R_i * veci;
-    //         auto vecri = Eigen::Vector2d(-veci.y(), veci.x());
-    //         double dpix = half_edge_projection(he.face(), edge, veci);
-    //         double dpiy = half_edge_projection(he.face(), edge, vecri);
-    //         // Fj
-    //         int fidj = he.face().getIndex();
-    //         Eigen::Vector2d vecj({local_basis[2 * fidj + 0], local_basis[2 * fidj + 1]});
-    //         vecj.normalized();
-    //         vecj = R_j * vecj;
-    //         auto vecrj = Eigen::Vector2d(-vecj.y(), vecj.x());
-    //         double dpjx = half_edge_projection(he.face(), edge, vecj);
-    //         double dpjy = half_edge_projection(he.face(), edge, vecrj);
-
-
-    //         Eigen::Vector2d Rijdp(0.5 * (dpix + dpjx), 0.5 * (dpiy + dpjy));
-
-    //         Eigen::Vector2d euRTdpij = euij * Rijdp;
-
-    //         euRTdp[e * 2] = euRTdpij.x();
-    //         euRTdp[e * 2 + 1] = euRTdpij.y();
+    //     for (Vertex v : mesh.vertices()) {
+    //         int vid = v.getIndex();
+    //         ret_uv[v].x = new_uv[vid * 2];
+    //         ret_uv[v].y = new_uv[vid * 2 + 1];
     //     }
+
+    //     this->dp_uv = ret_uv;
     // }
-    // triplets.emplace_back(mesh.nEdges() * 2, fixed_id * 2, 1);
-    // triplets.emplace_back(mesh.nEdges() * 2 + 1, fixed_id * 2 + 1, 1);
-    // euRTdp(mesh.nEdges() * 2) = 0;
-    // euRTdp(mesh.nEdges() * 2 + 1) = 0;
-
-    // uv_m.setFromTriplets(triplets.begin(), triplets.end());
-    // uv_m.makeCompressed();
-
-    // solver.compute(uv_m.transpose() * uv_m);
-    // Eigen::VectorXd new_uv = solver.solve(uv_m.transpose() * euRTdp);
-
-    // for (Vertex v : mesh.vertices()) {
-    //     int vid = v.getIndex();
-    //     ret_uv[v].x = new_uv[vid * 2];
-    //     ret_uv[v].y = new_uv[vid * 2 + 1];
-    // }
-
-    // this->dp_uv = ret_uv;
 
     return ret_uv;
 }
