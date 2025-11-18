@@ -1,5 +1,5 @@
 set(SRC_FILES
-    CM.hpp
-    CM.cpp
+    Rectangular.hpp
+    Rectangular.cpp
 )
 target_sources(Parameterization PUBLIC ${SRC_FILES})
